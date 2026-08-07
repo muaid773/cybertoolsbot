@@ -1,0 +1,6 @@
+asyncpg
+python-dotenv
+python-telegram-bot
+SQLAlchemy
+httpx
+phonenumbers
