@@ -10,7 +10,7 @@ def main_mnue_keyboard() -> ReplyKeyboardMarkup:
     keyboard = [
        [KeyboardButton(text="🔍 اقتناص حساب"), KeyboardButton(text="🔗 فحص الروابط")],
        [KeyboardButton(text="📈 تحليل اسم النظاق"), KeyboardButton(text="📞 كشف الأرقام")],
-       [KeyboardButton(text="⛅الطقس", request_location=True)],
+       [KeyboardButton(text="⛅الطقس", request_location=True), KeyboardButton(text="⭐ نقاطي")],
        [KeyboardButton(text="👩‍💻معلومات المطور👨‍💻")]
     ]
 

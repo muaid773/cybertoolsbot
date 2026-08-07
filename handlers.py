@@ -87,6 +87,27 @@ async def dev_info_handel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML"
     )
 
+async def my_points_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async with AsyncSessionLocal() as db:
+        user = await get_or_create_user(
+            db=db,
+            telegram_id=update.effective_user.id,
+            username=update.effective_user.username,
+            first_name=update.effective_user.first_name,
+        )
+
+        points = user.points
+
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=(
+            f"⭐ <b>نقاطك الحالية</b>\n\n"
+            f"🔹 لديك الآن: <b>{points}</b> نقطة\n\n"
+            f"استمر في استخدام البوت لجمع المزيد من النقاط 🚀"
+        ),
+        reply_markup=main_mnue_keyboard(),
+        parse_mode="HTML"
+    )
 
 async def weather_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.first_name or "عمنا"
@@ -251,6 +272,11 @@ async def text_msg_handlers(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text == "👩‍💻معلومات المطور👨‍💻":
         await dev_info_handel(update, context)
+        return
+
+    if text == "⭐ نقاطي":
+        await my_points_handler(update, context)
+        return
 
     if text == "🔍 اقتناص حساب":
         context.user_data["state"] = "awaiting_username"
