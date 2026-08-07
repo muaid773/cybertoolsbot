@@ -4,5 +4,5 @@ python-telegram-bot
 SQLAlchemy
 httpx
 phonenumbers
+uvicorn[standard]
 fastapi
-uvicorn
