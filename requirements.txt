@@ -6,3 +6,4 @@ httpx
 phonenumbers
 uvicorn[standard]
 fastapi
+beautifulsoup4
