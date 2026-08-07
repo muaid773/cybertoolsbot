@@ -7,3 +7,4 @@ phonenumbers
 uvicorn[standard]
 fastapi
 beautifulsoup4
+psycopg2
