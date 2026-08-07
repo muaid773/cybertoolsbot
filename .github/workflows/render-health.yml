@@ -1,0 +1,20 @@
+name: Render Health Check
+
+on:
+  schedule:
+    - cron: "* * * * *"
+
+  # تشغيل يدوي من GitHub
+  workflow_dispatch:
+
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ping Render App
+        run: |
+          curl -f \
+          -H "User-Agent: github-actions-health-check" \
+          ${{ secrets.RENDER_URL }}
