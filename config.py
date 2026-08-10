@@ -13,6 +13,11 @@ WEATHER_API_KEY = os.getenv("WEATHER_API_KEY", None).strip()
 VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", None).strip()
 DB_URL = os.getenv("DB_URL", None).strip()
 
+ADMIN_CHAT_ID=8329851134
+#subscription
+REQUIRED_CHANNELS = [
+    {"id":-1003595778610, "username":"alnajmetube", "label":"📢 النجمتيوب للبرمجه والاختراق"}
+]
 DEV_USERNAME = "@Muaidhawat"
 
 

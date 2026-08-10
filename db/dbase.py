@@ -61,7 +61,7 @@ def build_async_database_url(url: str) -> str:
 
 
 DATABASE_URL = build_async_database_url(DB_URL)
-
+print(DATABASE_URL)
 connect_args = {}
 
 if DATABASE_URL.startswith("sqlite"):

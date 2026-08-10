@@ -10,6 +10,7 @@ from keyboards import (
     CONTACT_ACTION_POINTS,
     CONTACT_ACTION_SEARCH,
 )
+from services.decorators import require_subscription
 from services.link_servoces import analyze_url, analyze_domain
 from services.scan_accs import search_username
 from services.users_contacts import (
@@ -64,13 +65,13 @@ def _format_search_result_text(result: dict) -> str:
 
     return "\n".join(lines)
 
-
+@require_subscription
 async def _reply_search_result(update: Update, result: dict) -> None:
     await update.message.reply_text(
         _format_search_result_text(result), parse_mode="Markdown"
     )
 
-
+@require_subscription
 async def start_command_handel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(
         update.effective_chat.id,
@@ -78,7 +79,7 @@ async def start_command_handel(update: Update, context: ContextTypes.DEFAULT_TYP
         reply_markup=main_mnue_keyboard(),
         parse_mode="HTML"
     )
-
+@require_subscription
 async def dev_info_handel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(
         update.effective_chat.id,
@@ -86,7 +87,7 @@ async def dev_info_handel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=main_mnue_keyboard(),
         parse_mode="HTML"
     )
-
+@require_subscription
 async def my_points_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with AsyncSessionLocal() as db:
         user = await get_or_create_user(
@@ -108,7 +109,7 @@ async def my_points_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=main_mnue_keyboard(),
         parse_mode="HTML"
     )
-
+@require_subscription
 async def weather_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.first_name or "عمنا"
     location = f"lat{update.message.location.latitude} - Long{update.message.location.longitude}"
@@ -123,7 +124,7 @@ async def weather_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==========================================================
 # طلب البحث عن جهة اتصال (تفعيل وضع "كشف الأرقام")
 # ==========================================================
-
+@require_subscription
 async def search_contact_handler(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -163,7 +164,7 @@ async def search_contact_handler(
 # ==========================================================
 # استقبال جهة اتصال
 # ==========================================================
-
+@require_subscription
 async def contact_handler(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -209,7 +210,7 @@ async def contact_handler(
 # ==========================================================
 # استقبال اختيار المستخدم من الأزرار الشفافة (Inline Buttons)
 # ==========================================================
-
+@require_subscription
 async def contact_action_callback(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -258,7 +259,7 @@ async def contact_action_callback(
 # ==========================================================
 # راوتر الرسائل النصية (القائمة الرئيسية)
 # ==========================================================
-
+@require_subscription
 async def text_msg_handlers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
