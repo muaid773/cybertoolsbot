@@ -29,72 +29,110 @@ from keyboards import CONTACT_ACTION_POINTS, CONTACT_ACTION_SEARCH
 from services.users_contacts import record_contact
 
 PHONE_RE = re.compile(r"^\+?[0-9]{6,15}$")
- 
- 
+
+# الحد الأقصى لعدد جهات الاتصال في الطلب الواحد
+MAX_CONTACTS_PER_REQUEST = 200
+
+# عدد العمليات التي يسمح بتنفيذها في نفس الوقت
+MAX_CONCURRENT_SAVES = 20
+
+
 class Contacts(BaseModel):
     phone: str
     name: str
- 
+
     @field_validator("phone")
     @classmethod
     def validate_phone(cls, v: str) -> str:
         if not PHONE_RE.match(v):
             raise ValueError("رقم هاتف غير صالح")
         return v
- 
- 
+
+
 class AddContacts(BaseModel):
     contacts: List[Contacts]
- 
- 
+
+
 class ContactResult(BaseModel):
     saved: int
     failed: int
     errors: List[str] = []
- 
- 
+
+
 app = FastAPI()
- 
- 
+
+
 def verify_api_key(x_api_key: str = Header(...)):
     if x_api_key != CONTACTS_API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized")
- 
- 
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
- 
- 
+
+
 @app.post("/contacts", response_model=ContactResult)
 async def add_contact(
     contact_payload: AddContacts,
     db: AsyncSession = Depends(get_db),
     _: None = Depends(verify_api_key),
 ):
-    if not contact_payload.contacts:
-        raise HTTPException(status_code=400, detail="لا توجد جهات اتصال في الطلب")
- 
+    contacts = contact_payload.contacts
+
+    if not contacts:
+        raise HTTPException(
+            status_code=400,
+            detail="لا توجد جهات اتصال في الطلب"
+        )
+
+    # منع الطلبات الضخمة
+    if len(contacts) > MAX_CONTACTS_PER_REQUEST:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"الحد الأقصى لعدد جهات الاتصال هو "
+                f"{MAX_CONTACTS_PER_REQUEST}"
+            ),
+        )
+
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_SAVES)
+
     saved = 0
     errors: List[str] = []
- 
+
     async def _save(cont: Contacts):
         nonlocal saved
-        try:
-            await record_contact(db, cont.phone, cont.name)
-            saved += 1
-        except Exception as e:
-            errors.append(f"{cont.phone}: {e}")
- 
-    # تنفيذ متوازٍ بدل حلقة تسلسلية بطيئة
-    await asyncio.gather(*(_save(c) for c in contact_payload.contacts))
- 
+
+        async with semaphore:
+            try:
+                await record_contact(
+                    db,
+                    cont.phone,
+                    cont.name
+                )
+                saved += 1
+
+            except Exception as e:
+                errors.append(
+                    f"{cont.phone}: {str(e)}"
+                )
+
+    await asyncio.gather(
+        *(_save(contact) for contact in contacts)
+    )
+
     try:
         await db.commit()
+
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"فشل حفظ البيانات: {e}")
- 
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"فشل حفظ البيانات: {e}"
+        )
+
     return ContactResult(
         saved=saved,
         failed=len(errors),
