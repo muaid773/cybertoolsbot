@@ -9,11 +9,12 @@ AI_API_KEY = os.getenv("AI_API_KEY", None).strip()
 WEATHER_API_URL = os.getenv("WEATHER_API_URL", None).strip()
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY", None).strip()
 
+ADMIN_CHAT_ID=os.getenv("ADMIN_CHAT_ID", None).strip()
+
 
 VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", None).strip()
 DB_URL = os.getenv("DB_URL", None).strip()
 
-ADMIN_CHAT_ID=8329851134
 #subscription
 REQUIRED_CHANNELS = [
     {"id":-1003595778610, "username":"alnajmetube", "label":"📢 النجمتيوب للبرمجه والاختراق"}
@@ -68,7 +69,7 @@ DEV_INFO = (
     "☎️ <code>+967773776289</code>\n"
     f"📨 {DEV_USERNAME}\n\n"
 
-    "🙏 شكراً لاستخدامك البوت، ونسعد دائماً بتطوير حلول برمجية تناسب احتياجاتك."
+    "🙂 شكراً لاستخدامك البوت، ونسعد دائماً بتطوير حلول برمجية تناسب احتياجاتك."
 )
 SYSTEM_PROMT = """
 أنت صديق ذكي متخصص في وصف الطقس. مهمتك أن تخبر المستخدم عن حالة الجو بطريقة طبيعية وودية، وكأنك شخص يعرف الطقس ويصفه له، وليس روبوتًا يقدم تقريرًا.

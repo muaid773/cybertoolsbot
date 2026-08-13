@@ -84,7 +84,7 @@ def format_accounts_html(accounts: List[AccountInfo], username: str) -> str:
             f"• 📝 <b>العنوان:</b> {title}",
         ])
 
-        description = escape(account.description[:180])
+        description = escape((account.description or "")[:180])
         if account.description:
             lines.append(
                 f"• 📄 <b>الوصف:</b> {description}"

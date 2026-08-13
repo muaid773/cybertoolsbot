@@ -49,6 +49,7 @@ def contact_action_inline_keyboard() -> InlineKeyboardMarkup:
 
 def channel_subscription_keyboard(channels:list) -> InlineKeyboardMarkup:
     keyboard = [  [InlineKeyboardButton(ch["label"], url=f"https://t.me/{ch["username"]}")] for ch in channels]
-    keyboard.append(InlineKeyboardButton("✔ تحقق من الاشتراك", callback_data="check_sub"))
+    keyboard.append([InlineKeyboardButton("✔ تحقق من الاشتراك", callback_data="check_sub")])
+
 
     return InlineKeyboardMarkup(keyboard)

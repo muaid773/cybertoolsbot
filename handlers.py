@@ -65,11 +65,12 @@ def _format_search_result_text(result: dict) -> str:
 
     return "\n".join(lines)
 
-@require_subscription
+
 async def _reply_search_result(update: Update, result: dict) -> None:
     await update.message.reply_text(
         _format_search_result_text(result), parse_mode="Markdown"
     )
+
 
 @require_subscription
 async def start_command_handel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -79,6 +80,17 @@ async def start_command_handel(update: Update, context: ContextTypes.DEFAULT_TYP
         reply_markup=main_mnue_keyboard(),
         parse_mode="HTML"
     )
+
+
+@require_subscription
+async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        "✅ تم التحقق من الاشتراك بنجاح."
+    )
+
+
 @require_subscription
 async def dev_info_handel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(
@@ -87,6 +99,8 @@ async def dev_info_handel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=main_mnue_keyboard(),
         parse_mode="HTML"
     )
+
+
 @require_subscription
 async def my_points_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with AsyncSessionLocal() as db:
@@ -96,7 +110,6 @@ async def my_points_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             username=update.effective_user.username,
             first_name=update.effective_user.first_name,
         )
-
         points = user.points
 
     await context.bot.send_message(
@@ -109,6 +122,8 @@ async def my_points_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=main_mnue_keyboard(),
         parse_mode="HTML"
     )
+
+
 @require_subscription
 async def weather_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.first_name or "عمنا"
@@ -118,7 +133,12 @@ async def weather_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"اسم المستخدم هو {username}. موقعه هو {location} وبيانات الطقس: {weather}",
         system_prompt=SYSTEM_PROMT
     )
-    await context.bot.send_message(update.effective_chat.id, text=reply, parse_mode="Markdown", reply_markup=main_mnue_keyboard())
+    await context.bot.send_message(
+        update.effective_chat.id,
+        text=reply,
+        parse_mode="Markdown",
+        reply_markup=main_mnue_keyboard()
+    )
 
 
 # ==========================================================
@@ -256,13 +276,98 @@ async def contact_action_callback(
     context.user_data.pop("pending_contact", None)
 
 
+async def handle_username_search(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    username: str,
+):
+    context.user_data["state"] = None
+
+    await update.message.reply_text("جاري البحث عن الحسابات...")
+
+    try:
+        result = await search_username(username)
+    except Exception:
+        await update.message.reply_text(
+            "حدث خطأ أثناء البحث عن الحسابات. يرجى المحاولة لاحقًا.",
+            reply_markup=main_mnue_keyboard(),
+        )
+        return
+
+    await update.message.reply_text(
+        result,
+        parse_mode="HTML",
+        reply_markup=main_mnue_keyboard(),
+    )
+
+
+async def handle_url_analysis(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    url: str,
+):
+    context.user_data["state"] = None
+
+    await update.message.reply_text("جاري التحليل...")
+
+    result = await analyze_url(url)
+
+    await update.message.reply_text(
+        result,
+        parse_mode="Markdown",
+        reply_markup=main_mnue_keyboard(),
+    )
+
+
+async def handle_domain_analysis(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    domain: str,
+):
+    context.user_data["state"] = None
+
+    await update.message.reply_text("جاري التحليل...")
+
+    result = await analyze_domain(domain)
+
+    await update.message.reply_text(
+        result,
+        parse_mode="Markdown",
+        reply_markup=main_mnue_keyboard(),
+    )
+
+
+async def handle_contact_search(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    query: str,
+):
+    async with AsyncSessionLocal() as db:
+        result = await handle_search_request(
+            db=db,
+            telegram_id=update.effective_user.id,
+            query=query,
+            contact_payload=None,
+            username=update.effective_user.username,
+            first_name=update.effective_user.first_name,
+        )
+
+    await _reply_search_result(update, result)
+
+
 # ==========================================================
 # راوتر الرسائل النصية (القائمة الرئيسية)
 # ==========================================================
 @require_subscription
-async def text_msg_handlers(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def text_msg_handlers(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+):
     text = update.message.text
 
+    # ======================================================
+    # Navigation
+    # ======================================================
     if text == "🏠 عودة الى الرئيسية":
         context.user_data.clear()
         await update.message.reply_text(
@@ -271,6 +376,9 @@ async def text_msg_handlers(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # ======================================================
+    # Main Menu
+    # ======================================================
     if text == "👩‍💻معلومات المطور👨‍💻":
         await dev_info_handel(update, context)
         return
@@ -281,17 +389,15 @@ async def text_msg_handlers(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text == "🔍 اقتناص حساب":
         context.user_data["state"] = "awaiting_username"
-        await context.bot.send_message(
-            update.effective_chat.id,
+        await update.message.reply_text(
             "قم بكتابة اسم المستخدم الذي تريد اقتناصه.",
-            reply_markup=back_home_keyboard()
+            reply_markup=back_home_keyboard(),
         )
         return
 
     if text == "🔗 فحص الروابط":
-        await context.bot.send_message(
-            update.effective_chat.id,
-            "الميزة غير مفعلة حاليًا.",
+        await update.message.reply_text(
+            "الميزة غير مفعلة حاليًا."
         )
         return
 
@@ -301,48 +407,29 @@ async def text_msg_handlers(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text == "📈 تحليل اسم النظاق":
         context.user_data["state"] = "awaiting_domain"
-        await context.bot.send_message(update.effective_chat.id, "ارسل لنا اسم النطاق", reply_markup=back_home_keyboard())
+        await update.message.reply_text(
+            "ارسل لنا اسم النطاق",
+            reply_markup=back_home_keyboard(),
+        )
         return
 
+    # ======================================================
+    # States
+    # ======================================================
     status = context.user_data.get("state")
 
     if status == "awaiting_username":
-        username = text.strip()
-        context.user_data["state"] = None
-        await context.bot.send_message(update.effective_chat.id, "جاري البحث عن الحسابات...")
-        result = await search_username(username)
-        await context.bot.send_message(update.effective_chat.id, text=result, parse_mode="HTML", reply_markup=main_mnue_keyboard())
+        await handle_username_search(update, context, text.strip())
         return
 
     if status == "awaiting_link":
-        url = text.strip()
-        context.user_data["state"] = None
-        await context.bot.send_message(update.effective_chat.id, "جاري التحليل...")
-        result = await analyze_url(url)
-        await context.bot.send_message(update.effective_chat.id, text=result, parse_mode="Markdown", reply_markup=main_mnue_keyboard())
+        await handle_url_analysis(update, context, text.strip())
         return
 
     if status == "awaiting_domain":
-        domain = text.strip()
-        await context.bot.send_message(update.effective_chat.id, "جاري التحليل...")
-        result = await analyze_domain(domain)
-        await context.bot.send_message(update.effective_chat.id, text=result, parse_mode="Markdown", reply_markup=main_mnue_keyboard())
+        await handle_domain_analysis(update, context, text.strip())
         return
 
-    # --- البحث عن جهة اتصال عبر إرسال الرقم كنص، ويبقى الوضع مفعّلاً للاستعلام المتكرر ---
     if status == "awaiting_contact":
-        query = text.strip()
-
-        async with AsyncSessionLocal() as db:
-            result = await handle_search_request(
-                db=db,
-                telegram_id=update.effective_user.id,
-                query=query,
-                contact_payload=None,
-                username=update.effective_user.username,
-                first_name=update.effective_user.first_name,
-            )
-
-        await _reply_search_result(update, result)
-        # لا نُصفّر الحالة هنا: يبقى بإمكانه الاستعلام مرة بعد مرة
-        # حتى يضغط "🏠 عودة الى الرئيسية".
+        await handle_contact_search(update, context, text.strip())
+        return

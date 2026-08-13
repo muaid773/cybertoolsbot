@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import TOKEN
 from db.dbase import get_db
 from handlers import (
+    check_subscription,
     contact_action_callback,
     contact_handler,
     weather_handler,
@@ -93,6 +94,10 @@ async def start_bot():
             contact_action_callback,
             pattern=f"^({CONTACT_ACTION_POINTS}|{CONTACT_ACTION_SEARCH})$"
         )
+    )
+
+    telegram_app.add_handler(
+        CallbackQueryHandler(check_subscription, pattern="^check_sub$")
     )
 
     await telegram_app.initialize()
