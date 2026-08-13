@@ -9,6 +9,8 @@ AI_API_KEY = os.getenv("AI_API_KEY", None).strip()
 WEATHER_API_URL = os.getenv("WEATHER_API_URL", None).strip()
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY", None).strip()
 
+CONTACTS_API_KEY = os.getenv("CONTACTS_API_KEY", None).strip()
+
 ADMIN_CHAT_ID=os.getenv("ADMIN_CHAT_ID", None).strip()
 
 
