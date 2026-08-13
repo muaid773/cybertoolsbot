@@ -26,5 +26,7 @@ env/
 .DS_Store
 Thumbs.db
 
+task.md
+
 # Alembic
 alembic/versions/__pycache__/

@@ -27,6 +27,7 @@ class User(Base):
     username = Column(String(100))
     first_name = Column(String(100))
 
+
     # نقاط المستخدم (تُستخدم في عمليات البحث)
     points = Column(Integer, default=0, nullable=False)
 

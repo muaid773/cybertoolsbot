@@ -35,7 +35,28 @@ class PhoneInfo:
     is_valid: bool
     is_yemeni: bool
     region: str | None = None
+async def record_contact(
+    db: AsyncSession,
+    phone: str,
+    name: str,
+) -> dict[str, Any]:
 
+    full_name = name.strip() or "بدون اسم"
+
+    result = await db.execute(select(Contact).where(Contact.phone == phone))
+    contact = result.scalar_one_or_none()
+
+    if contact is None:
+        contact = Contact(phone=phone)
+        db.add(contact)
+        await db.flush()  # لضمان توليد contact.id قبل استخدامه بالأسفل
+
+    existing_names = set(await _get_contact_names(db, contact.id))
+    if full_name not in existing_names:
+        db.add(ContactName(contact_id=contact.id, name=full_name))
+
+    await db.commit()
+    return True
 
 def normalize_phone_info(phone: str) -> PhoneInfo:
     """
@@ -179,7 +200,7 @@ async def handle_incoming_contact(
         return {
             "ok": False,
             "duplicate": False,
-            "message": "❌ عذرًا، هذا الرقم يجب أن يكون رقمًا يمنيًا بصيغة مناسبة.",
+            "message": ("❌ عذرًا، نحن ندعم الارقام اليمنية فقط"),
         }
 
     phone = phone_info.normalized

@@ -61,7 +61,6 @@ def build_async_database_url(url: str) -> str:
 
 
 DATABASE_URL = build_async_database_url(DB_URL)
-print(DATABASE_URL)
 connect_args = {}
 
 if DATABASE_URL.startswith("sqlite"):
@@ -79,7 +78,7 @@ engine = create_async_engine(
     echo=False,
     pool_pre_ping=True,
     connect_args={
-        "ssl": "require"
+        # "ssl": "require"
     }
 )
 AsyncSessionLocal = async_sessionmaker(

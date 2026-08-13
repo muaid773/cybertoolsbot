@@ -1,6 +1,7 @@
 import asyncio
-
-from fastapi import FastAPI
+from typing import List
+from pydantic import BaseModel
+from fastapi import FastAPI, Depends
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -9,8 +10,9 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler,
 )
-
+from sqlalchemy.ext.asyncio import AsyncSession
 from config import TOKEN
+from db.dbase import get_db
 from handlers import (
     contact_action_callback,
     contact_handler,
@@ -21,7 +23,13 @@ from handlers import (
 
 from initdb import create_tables
 from keyboards import CONTACT_ACTION_POINTS, CONTACT_ACTION_SEARCH
+from services.users_contacts import record_contact
 
+class Contacts(BaseModel):
+    phone:str
+    name:str
+class AddContacts(BaseModel):
+    contacts:List[Contacts]
 
 app = FastAPI()
 
@@ -33,7 +41,11 @@ async def health():
     return {
         "status": "ok"
     }
-
+@app.post("/contacts")
+async def add_contact(contact_payload:AddContacts, db: AsyncSession = Depends(get_db),):
+    for cont in contact_payload.contacts:
+        await record_contact(db, cont.phone, cont.name)
+    return {"status": "ok"}
 
 async def start_bot():
 
@@ -114,5 +126,4 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
-
     await stop_bot()

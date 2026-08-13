@@ -1,5 +1,5 @@
 from functools import wraps
-from telegram import Update, ChatMember, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, ChatMember
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest
 from config import REQUIRED_CHANNELS, ADMIN_CHAT_ID
@@ -15,7 +15,7 @@ def require_subscription(func):
                     not_subscripted.append(channel)
             except BadRequest as e:
                 text = (
-                    "🚨 حدث خطاء من التحقق الاجباري في القناة.\n\n"
+                    "⚠ حدث خطاء من التحقق الاجباري في القناة.\n\n"
                     f"{e}"
                 )
                 await context.bot.send_message(ADMIN_CHAT_ID, text=text)
