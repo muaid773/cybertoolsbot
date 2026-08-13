@@ -86,7 +86,6 @@ async def add_contact(
             detail="لا توجد جهات اتصال في الطلب"
         )
 
-    # منع الطلبات الضخمة
     if len(contacts) > MAX_CONTACTS_PER_REQUEST:
         raise HTTPException(
             status_code=413,
@@ -96,32 +95,30 @@ async def add_contact(
             ),
         )
 
-    semaphore = asyncio.Semaphore(MAX_CONCURRENT_SAVES)
-
     saved = 0
     errors: List[str] = []
 
-    async def _save(cont: Contacts):
-        nonlocal saved
+    for contact in contacts:
+        try:
+            await record_contact(
+                db,
+                contact.phone,
+                contact.name
+            )
 
-        async with semaphore:
-            try:
-                await record_contact(
-                    db,
-                    cont.phone,
-                    cont.name
-                )
-                saved += 1
+            saved += 1
 
-            except Exception as e:
-                errors.append(
-                    f"{cont.phone}: {str(e)}"
-                )
+        except Exception as e:
+            # مهم جدًا:
+            # إذا حدث خطأ في SQLAlchemy نرجع الـ transaction
+            # للحالة السليمة قبل معالجة جهة الاتصال التالية.
+            await db.rollback()
 
-    await asyncio.gather(
-        *(_save(contact) for contact in contacts)
-    )
+            errors.append(
+                f"{contact.phone}: {str(e)}"
+            )
 
+    # حفظ كل العمليات الناجحة دفعة واحدة
     try:
         await db.commit()
 
@@ -138,7 +135,6 @@ async def add_contact(
         failed=len(errors),
         errors=errors,
     )
-
 
 async def start_bot():
 

@@ -407,21 +407,37 @@ async def record_contact(
     db: AsyncSession,
     phone: str,
     name: str,
-) -> dict[str, Any]:
+) -> bool:
 
     full_name = name.strip() or "بدون اسم"
 
-    result = await db.execute(select(Contact).where(Contact.phone == phone))
+    result = await db.execute(
+        select(Contact).where(
+            Contact.phone == phone
+        )
+    )
+
     contact = result.scalar_one_or_none()
 
     if contact is None:
         contact = Contact(phone=phone)
         db.add(contact)
-        await db.flush()  # لضمان توليد contact.id قبل استخدامه بالأسفل
 
-    existing_names = set(await _get_contact_names(db, contact.id))
+        await db.flush()
+
+    existing_names = set(
+        await _get_contact_names(
+            db,
+            contact.id
+        )
+    )
+
     if full_name not in existing_names:
-        db.add(ContactName(contact_id=contact.id, name=full_name))
+        db.add(
+            ContactName(
+                contact_id=contact.id,
+                name=full_name
+            )
+        )
 
-    await db.commit()
     return True
