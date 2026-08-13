@@ -9,30 +9,45 @@ import phonenumbers
 from phonenumbers import PhoneNumberFormat
 
 
+# ============================================================
+# إعدادات API
+# ============================================================
+
 API_URL = "https://cybertoolsbot.onrender.com/contacts"
 
 API_KEY = "123qwessasnid32dwq3-3e3e8u382-=12e93"
 
-# يجب أن يطابق MAX_CONTACTS_PER_REQUEST في السيرفر
+# يجب أن يطابق السيرفر
 MAX_CONTACTS_PER_REQUEST = 200
 
-# عدد الطلبات التي يمكن إرسالها في نفس الوقت
+# عدد الطلبات المتزامنة
 MAX_CONCURRENT_REQUESTS = 5
 
 
-PHONE_RE = re.compile(r"^\+?[0-9]{6,15}$")
+# ============================================================
+# Phone
+# ============================================================
+
+PHONE_RE = re.compile(
+    r"^\+[0-9]{6,15}$"
+)
 
 
-def normalize_phone_info(phone: str | None) -> str | None:
+def normalize_phone(phone: str | None) -> str | None:
     """
-    تحويل رقم الهاتف إلى E.164.
+    تحويل الرقم إلى E.164 والتأكد أنه رقم يمني صالح.
 
-    مثال:
-        777123456
-        =>
-        +967777123456
+    أمثلة:
 
-    ترجع None إذا كان الرقم غير صالح أو ليس رقمًا يمنيًا.
+        0771234567
+        771234567
+        +967771234567
+
+    إذا كان صالحًا:
+        +967771234567
+
+    وإلا:
+        None
     """
 
     if not phone:
@@ -44,33 +59,44 @@ def normalize_phone_info(phone: str | None) -> str | None:
         return None
 
     try:
-        parsed = phonenumbers.parse(phone, "YE")
+        parsed = phonenumbers.parse(
+            phone,
+            "YE",
+        )
+
     except phonenumbers.NumberParseException:
         return None
 
-    region = phonenumbers.region_code_for_number(parsed)
-
-    if region != "YE":
+    # يجب أن يكون الرقم يمنيًا
+    if phonenumbers.region_code_for_number(parsed) != "YE":
         return None
 
+    # يجب أن يكون صالحًا
     if not phonenumbers.is_valid_number(parsed):
         return None
 
     normalized = phonenumbers.format_number(
         parsed,
-        PhoneNumberFormat.E164
+        PhoneNumberFormat.E164,
     )
 
-    # تأكيد أن الرقم مطابق لما يقبله FastAPI
     if not PHONE_RE.fullmatch(normalized):
         return None
 
     return normalized
 
 
-def decode_value(value: str, params: str) -> str:
+# ============================================================
+# VCF decoding
+# ============================================================
+
+def decode_value(
+    value: str,
+    params: str,
+) -> str:
     """
-    فك ترميز قيمة من VCF.
+    فك قيمة من VCF.
+
     يدعم:
     - BASE64
     - QUOTED-PRINTABLE
@@ -80,123 +106,224 @@ def decode_value(value: str, params: str) -> str:
     value = value.strip()
     params_upper = params.upper()
 
+    # --------------------------------------------------------
     # BASE64
-    if "ENCODING=B" in params_upper or "ENCODING=BASE64" in params_upper:
+    # --------------------------------------------------------
+
+    if (
+        "ENCODING=B" in params_upper
+        or "ENCODING=BASE64" in params_upper
+    ):
         try:
-            return base64.b64decode(value).decode(
-                "utf-8",
-                errors="ignore"
+            decoded = base64.b64decode(
+                value
             )
+
+            charset_match = re.search(
+                r"CHARSET=([^;:]+)",
+                params,
+                re.I,
+            )
+
+            charset = (
+                charset_match.group(1).strip()
+                if charset_match
+                else "utf-8"
+            )
+
+            return decoded.decode(
+                charset,
+                errors="ignore",
+            )
+
         except Exception:
             pass
 
-    # QUOTED-PRINTABLE
+    # --------------------------------------------------------
+    # QUOTED PRINTABLE
+    # --------------------------------------------------------
+
     if (
         "ENCODING=QUOTED-PRINTABLE" in params_upper
         or "QUOTED-PRINTABLE" in params_upper
     ):
         try:
-            return quopri.decodestring(
+            decoded = quopri.decodestring(
                 value.encode("utf-8")
-            ).decode(
-                "utf-8",
-                errors="ignore"
             )
+
+            charset_match = re.search(
+                r"CHARSET=([^;:]+)",
+                params,
+                re.I,
+            )
+
+            charset = (
+                charset_match.group(1).strip()
+                if charset_match
+                else "utf-8"
+            )
+
+            return decoded.decode(
+                charset,
+                errors="ignore",
+            )
+
         except Exception:
             pass
 
+    # --------------------------------------------------------
     # CHARSET
+    # --------------------------------------------------------
+
     charset_match = re.search(
         r"CHARSET=([^;:]+)",
         params,
-        re.I
+        re.I,
     )
 
     if charset_match:
         charset = charset_match.group(1).strip()
 
         try:
-            return value.encode("latin1").decode(
+            return value.encode(
+                "latin1"
+            ).decode(
                 charset,
-                errors="ignore"
+                errors="ignore",
             )
+
         except Exception:
             pass
 
     return value
 
 
-def extract_name(vcard: str) -> str:
+# ============================================================
+# Name
+# ============================================================
+
+def clean_name(name: str) -> str:
     """
-    استخراج اسم جهة الاتصال من VCARD.
-    يحاول FN أولاً ثم N.
+    تنظيف الاسم.
     """
 
+    name = " ".join(
+        name.split()
+    )
+
+    if not name:
+        return "بدون اسم"
+
+    return name[:255]
+
+
+def extract_name(
+    vcard: str,
+) -> str:
+    """
+    استخراج اسم جهة الاتصال.
+
+    الأولوية:
+        FN
+        ثم N
+    """
+
+    # --------------------------------------------------------
     # FN
+    # --------------------------------------------------------
+
     fn_match = re.search(
         r"^FN([^:]*):(.*)$",
         vcard,
-        re.I | re.M
+        re.I | re.M,
     )
 
     if fn_match:
+
         params, raw_name = fn_match.groups()
 
         name = decode_value(
             raw_name,
-            params
-        ).strip()
+            params,
+        )
 
-        if name:
+        name = clean_name(name)
+
+        if name != "بدون اسم":
             return name
 
+    # --------------------------------------------------------
     # N
+    # --------------------------------------------------------
+
     n_match = re.search(
         r"^N([^:]*):([^;]*);([^;]*)",
         vcard,
-        re.I | re.M
+        re.I | re.M,
     )
 
     if n_match:
-        params, last_name, first_name = n_match.groups()
 
-        name = f"{first_name} {last_name}".strip()
+        params, last_name, first_name = (
+            n_match.groups()
+        )
 
-        name = decode_value(
-            name,
-            params
-        ).strip()
+        first_name = decode_value(
+            first_name,
+            params,
+        )
 
-        if name:
+        last_name = decode_value(
+            last_name,
+            params,
+        )
+
+        name = clean_name(
+            f"{first_name} {last_name}"
+        )
+
+        if name != "بدون اسم":
             return name
 
     return "بدون اسم"
 
 
-def extract_phone(vcard: str) -> str | None:
+# ============================================================
+# Phone
+# ============================================================
+
+def extract_phone(
+    vcard: str,
+) -> str | None:
     """
-    استخراج أول رقم هاتف صالح من VCARD.
+    استخراج أول رقم يمني صالح من VCARD.
     """
 
     tel_matches = re.findall(
         r"^TEL([^:]*):([^\r\n]+)",
         vcard,
-        re.I | re.M
+        re.I | re.M,
     )
 
     for params, raw_phone in tel_matches:
 
-        # إزالة المسافات والأقواس والشرطات وغيرها
+        # إزالة:
+        # spaces
+        # -
+        # ()
+        # .
+        # إلخ
         phone_clean = re.sub(
             r"[^\d+]",
             "",
-            raw_phone
+            raw_phone,
         )
 
         if len(phone_clean) < 7:
             continue
 
-        normalized = normalize_phone_info(
+        normalized = normalize_phone(
             phone_clean
         )
 
@@ -206,36 +333,56 @@ def extract_phone(vcard: str) -> str | None:
     return None
 
 
-def parse_vcf(vcf_file: str) -> list[dict[str, str]]:
+# ============================================================
+# VCF parser
+# ============================================================
+
+def parse_vcf(
+    vcf_file: str,
+) -> list[dict[str, str]]:
     """
-    قراءة ملف VCF وتحويله إلى القائمة التي يقبلها API.
+    قراءة ملف VCF وتحويله إلى:
+
+    [
+        {
+            "phone": "+967771234567",
+            "name": "محمد"
+        }
+    ]
     """
 
     with open(
         vcf_file,
         "r",
         encoding="utf-8",
-        errors="ignore"
-    ) as f:
-        vcf_data = f.read()
+        errors="ignore",
+    ) as file:
 
-    # إصلاح folded lines في VCF
+        vcf_data = file.read()
+
+    # --------------------------------------------------------
+    # إصلاح folded lines
+    # --------------------------------------------------------
+
     vcf_data = re.sub(
-        r"=\r?\n[ \t]",
+        r"\r?\n[ \t]",
         "",
-        vcf_data
+        vcf_data,
     )
 
-    # تقسيم البطاقات
+    # --------------------------------------------------------
+    # تقسيم VCARD
+    # --------------------------------------------------------
+
     vcards = re.split(
         r"BEGIN:VCARD",
         vcf_data,
-        flags=re.I
+        flags=re.I,
     )
 
     contacts: list[dict[str, str]] = []
 
-    # لمنع تكرار نفس الرقم
+    # منع تكرار الرقم
     seen_phones: set[str] = set()
 
     for vcard in vcards:
@@ -243,39 +390,54 @@ def parse_vcf(vcf_file: str) -> list[dict[str, str]]:
         if "END:VCARD" not in vcard.upper():
             continue
 
-        name = extract_name(vcard)
         phone = extract_phone(vcard)
 
         if not phone:
             continue
 
-        # منع التكرار
+        # نفس الرقم موجود في أكثر من بطاقة
         if phone in seen_phones:
             continue
+
+        name = extract_name(vcard)
 
         seen_phones.add(phone)
 
         contacts.append(
             {
                 "phone": phone,
-                "name": name or "بدون اسم"
+                "name": name,
             }
         )
 
     return contacts
 
 
+# ============================================================
+# Chunks
+# ============================================================
+
 def chunks(
     items: list[Any],
-    size: int
+    size: int,
 ):
     """
     تقسيم القائمة إلى دفعات.
     """
 
-    for i in range(0, len(items), size):
-        yield items[i:i + size]
+    for index in range(
+        0,
+        len(items),
+        size,
+    ):
+        yield items[
+            index:index + size
+        ]
 
+
+# ============================================================
+# Send batch
+# ============================================================
 
 async def send_batch(
     client: httpx.AsyncClient,
@@ -287,76 +449,102 @@ async def send_batch(
     async with semaphore:
 
         try:
+
             response = await client.post(
                 API_URL,
                 headers={
-                    "x-api-key": API_KEY
+                    "x-api-key": API_KEY,
                 },
                 json={
-                    "contacts": batch
-                }
+                    "contacts": batch,
+                },
             )
 
             print(
-                f"Batch #{batch_number}: "
+                f"Batch #{batch_number} "
                 f"HTTP {response.status_code}"
             )
 
             try:
                 data = response.json()
-            except Exception:
+
+            except ValueError:
+
                 data = {
-                    "raw_response": response.text
+                    "error": response.text,
                 }
 
             if response.is_success:
+
                 return {
                     "success": True,
                     "batch": batch_number,
-                    "data": data
+                    "data": data,
                 }
 
             return {
                 "success": False,
                 "batch": batch_number,
-                "data": data
+                "data": data,
             }
 
-        except Exception as e:
+        except httpx.RequestError as exc:
 
             return {
                 "success": False,
                 "batch": batch_number,
                 "data": {
-                    "error": str(e)
-                }
+                    "error": (
+                        f"فشل الاتصال بالخادم: {exc}"
+                    )
+                },
+            }
+
+        except Exception as exc:
+
+            return {
+                "success": False,
+                "batch": batch_number,
+                "data": {
+                    "error": str(exc),
+                },
             }
 
 
+# ============================================================
+# Upload
+# ============================================================
+
 async def upload_contacts(
-    contacts: list[dict[str, str]]
+    contacts: list[dict[str, str]],
 ):
     """
     إرسال جهات الاتصال إلى API على دفعات.
     """
 
     if not contacts:
-        print("لا توجد جهات اتصال صالحة للإرسال.")
+
+        print(
+            "لا توجد جهات اتصال صالحة للإرسال."
+        )
+
         return
 
     batches = list(
         chunks(
             contacts,
-            MAX_CONTACTS_PER_REQUEST
+            MAX_CONTACTS_PER_REQUEST,
         )
     )
 
     print(
-        f"إجمالي جهات الاتصال: {len(contacts)}"
+        f"إجمالي جهات الاتصال: "
+        f"{len(contacts)}"
     )
 
     print(
-        f"عدد الطلبات: {len(batches)}"
+        f"عدد الطلبات: "
+        f"{len(batches)}"
     )
 
     semaphore = asyncio.Semaphore(
@@ -367,21 +555,27 @@ async def upload_contacts(
         connect=10.0,
         read=60.0,
         write=60.0,
-        pool=60.0
+        pool=60.0,
     )
 
     async with httpx.AsyncClient(
-        timeout=timeout
+        timeout=timeout,
+        limits=httpx.Limits(
+            max_connections=10,
+            max_keepalive_connections=5,
+        ),
     ) as client:
 
         tasks = [
             send_batch(
-                client,
-                batch,
-                index + 1,
-                semaphore
+                client=client,
+                batch=batch,
+                batch_number=index + 1,
+                semaphore=semaphore,
             )
-            for index, batch in enumerate(batches)
+            for index, batch in enumerate(
+                batches
+            )
         ]
 
         results = await asyncio.gather(
@@ -391,68 +585,106 @@ async def upload_contacts(
     total_saved = 0
     total_failed = 0
 
+    # --------------------------------------------------------
+    # النتائج
+    # --------------------------------------------------------
+
     for result in results:
 
+        batch_number = result["batch"]
         data = result.get("data", {})
 
         if result["success"]:
 
-            saved = data.get("saved", 0)
-            failed = data.get("failed", 0)
+            saved = int(
+                data.get("saved", 0)
+            )
+
+            failed = int(
+                data.get("failed", 0)
+            )
 
             total_saved += saved
             total_failed += failed
 
             print(
-                f"Batch #{result['batch']} "
+                f"Batch #{batch_number}: "
                 f"saved={saved}, "
                 f"failed={failed}"
             )
 
-            errors = data.get("errors", [])
+            for error in data.get(
+                "errors",
+                [],
+            ):
 
-            for error in errors:
                 print(
                     f"  ERROR: {error}"
                 )
 
         else:
 
-            total_failed += len(
-                batches[result["batch"] - 1]
+            failed = len(
+                batches[
+                    batch_number - 1
+                ]
+            )
+
+            total_failed += failed
+
+            print(
+                f"Batch #{batch_number} FAILED"
             )
 
             print(
-                f"Batch #{result['batch']} FAILED:"
+                data
             )
 
-            print(data)
-
     print()
-    print("========== النتيجة ==========")
-    print(f"Saved : {total_saved}")
-    print(f"Failed: {total_failed}")
-
-
-async def extract_contacts_from_vcf(
-    vcf_file: str
-):
-    """
-    قراءة VCF ثم إرسال جميع جهات الاتصال إلى API.
-    """
-
-    contacts = parse_vcf(vcf_file)
-
     print(
-        f"تم استخراج {len(contacts)} جهة اتصال صالحة."
+        "========== النتيجة =========="
+    )
+    print(
+        f"Saved : {total_saved}"
+    )
+    print(
+        f"Failed: {total_failed}"
     )
 
-    await upload_contacts(
+    return {
+        "saved": total_saved,
+        "failed": total_failed,
+    }
+
+
+# ============================================================
+# Main
+# ============================================================
+
+async def extract_contacts_from_vcf(
+    vcf_file: str,
+):
+    """
+    قراءة VCF ثم رفع جهات الاتصال.
+    """
+
+    contacts = parse_vcf(
+        vcf_file
+    )
+
+    print(
+        f"تم استخراج "
+        f"{len(contacts)} "
+        f"جهة اتصال صالحة."
+    )
+
+    result = await upload_contacts(
         contacts
     )
 
     return {
-        "contacts": contacts
+        "contacts": contacts,
+        "result": result,
     }
 
 

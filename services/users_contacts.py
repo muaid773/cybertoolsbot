@@ -402,14 +402,18 @@ async def handle_search_request(
     }
 
 
-
 async def record_contact(
     db: AsyncSession,
     phone: str,
     name: str,
 ) -> bool:
 
-    full_name = name.strip() or "بدون اسم"
+    phone = normalize_phone(phone)
+
+    if phone is None:
+        raise ValueError("رقم هاتف غير صالح")
+
+    full_name = " ".join(name.split()) or "بدون اسم"
 
     result = await db.execute(
         select(Contact).where(
@@ -425,19 +429,21 @@ async def record_contact(
 
         await db.flush()
 
-    existing_names = set(
-        await _get_contact_names(
-            db,
-            contact.id
+    result = await db.execute(
+        select(ContactName.id).where(
+            ContactName.contact_id == contact.id,
+            ContactName.name == full_name,
         )
     )
 
-    if full_name not in existing_names:
+    if result.scalar_one_or_none() is None:
         db.add(
             ContactName(
                 contact_id=contact.id,
-                name=full_name
+                name=full_name,
             )
         )
 
     return True
+
+

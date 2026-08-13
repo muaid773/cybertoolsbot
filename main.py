@@ -2,7 +2,7 @@ import asyncio
 import re
 
 from typing import List
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, Field
 from fastapi import FastAPI, Depends, HTTPException, Header
 
 from telegram.ext import (
@@ -39,32 +39,45 @@ MAX_CONCURRENT_SAVES = 20
 
 class Contacts(BaseModel):
     phone: str
-    name: str
+    name: str = ""
 
     @field_validator("phone")
     @classmethod
-    def validate_phone(cls, v: str) -> str:
-        if not PHONE_RE.match(v):
+    def validate_phone(cls, value: str) -> str:
+        value = value.strip()
+
+        if not PHONE_RE.fullmatch(value):
             raise ValueError("رقم هاتف غير صالح")
-        return v
+
+        return value
 
 
 class AddContacts(BaseModel):
-    contacts: List[Contacts]
+    contacts: List[Contacts] = Field(
+        min_length=1,
+        max_length=MAX_CONTACTS_PER_REQUEST,
+    )
 
 
 class ContactResult(BaseModel):
     saved: int
     failed: int
-    errors: List[str] = []
+    errors: List[str] = Field(
+        default_factory=list
+    )
 
 
 app = FastAPI()
 
 
-def verify_api_key(x_api_key: str = Header(...)):
+def verify_api_key(
+    x_api_key: str = Header(...),
+):
     if x_api_key != CONTACTS_API_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized",
+        )
 
 
 @app.get("/health")
@@ -72,62 +85,52 @@ async def health():
     return {"status": "ok"}
 
 
-@app.post("/contacts", response_model=ContactResult)
+@app.post(
+    "/contacts",
+    response_model=ContactResult,
+)
 async def add_contact(
     contact_payload: AddContacts,
     db: AsyncSession = Depends(get_db),
     _: None = Depends(verify_api_key),
 ):
-    contacts = contact_payload.contacts
-
-    if not contacts:
-        raise HTTPException(
-            status_code=400,
-            detail="لا توجد جهات اتصال في الطلب"
-        )
-
-    if len(contacts) > MAX_CONTACTS_PER_REQUEST:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"الحد الأقصى لعدد جهات الاتصال هو "
-                f"{MAX_CONTACTS_PER_REQUEST}"
-            ),
-        )
-
     saved = 0
     errors: List[str] = []
 
-    for contact in contacts:
+    for contact in contact_payload.contacts:
+
         try:
-            await record_contact(
-                db,
-                contact.phone,
-                contact.name
-            )
+            # SAVEPOINT خاص بهذه العملية.
+            #
+            # إذا حدث خطأ هنا، يتم التراجع
+            # عن هذه العملية فقط.
+            async with db.begin_nested():
+
+                await record_contact(
+                    db=db,
+                    phone=contact.phone,
+                    name=contact.name,
+                )
 
             saved += 1
 
-        except Exception as e:
-            # مهم جدًا:
-            # إذا حدث خطأ في SQLAlchemy نرجع الـ transaction
-            # للحالة السليمة قبل معالجة جهة الاتصال التالية.
-            await db.rollback()
-
+        except Exception:
             errors.append(
-                f"{contact.phone}: {str(e)}"
+                f"{contact.phone}: تعذر حفظ جهة الاتصال"
             )
 
-    # حفظ كل العمليات الناجحة دفعة واحدة
+    # حفظ جميع العمليات الناجحة
     try:
+
         await db.commit()
 
-    except Exception as e:
+    except Exception:
+
         await db.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=f"فشل حفظ البيانات: {e}"
+            detail="فشل حفظ جهات الاتصال",
         )
 
     return ContactResult(
@@ -135,6 +138,8 @@ async def add_contact(
         failed=len(errors),
         errors=errors,
     )
+
+
 
 async def start_bot():
 
