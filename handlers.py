@@ -12,7 +12,7 @@ from keyboards import (
 )
 from services.decorators import require_subscription
 from services.link_servoces import analyze_url, analyze_domain
-from services.migreat import search_username
+from services.scan_accs import search_username
 from services.users_contacts import (
     get_or_create_user,
     handle_incoming_contact,
